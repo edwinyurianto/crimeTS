@@ -1,0 +1,120 @@
+---
+title: "TS"
+output: html_document
+---
+
+
+    Is crime generally rising in Chicago in the past decade (last 10 years)?
+    Is there a seasonal component to the crime rate?
+    Which time series method seems to capture the variation in your time series better? Explain your choice of algorithm and its key assumptions
+
+```{r}
+dataset <- read.csv("Crimes_-_2001_to_present.csv")
+```
+
+
+```{r}
+str(dataset)
+```
+
+```{r}
+head(dataset)
+```
+
+  From this data, we will build a forecasting project by inspecting the seasonality and trend of crime in Chicago. we need to convert the "Date" into date format then sort it by date.
+
+```{r}
+dataset$Date <- as.Date(dataset$Date, format = "%m/%d/%Y")
+```
+
+```{r}
+dataset <- dataset[order(dataset$Date),]
+```
+
+```{r}
+head(dataset)
+```
+
+After that, we need to count the frequency for each crime in a day before we can make the timeseries. 
+
+```{r}
+library(plyr)
+dataset_count <- count(dataset, "Date")
+count_theft <- count(dataset[dataset$Primary.Type== "THEFT",], "Date")
+```
+
+```{r}
+head(dataset_count)
+```
+
+We can try to look at specific crime, like theft.
+```{r}
+tail(count_theft)
+```
+
+we will look at the monthly crime by summing the freq for each months.
+```{r}
+library(xts)
+crime <- as.xts(dataset_count$freq, order.by=as.Date(dataset_count$Date))
+crime_months <- apply.monthly(crime,sum)
+crime2 <- as.xts(count_theft$freq, order.by=as.Date(count_theft$Date))
+theft_month <- apply.monthly(crime2,sum)
+```
+
+```{r}
+#start here with rds file
+crime_months <- read_rds("crime_months.rds")
+theft_month <- read_rds("theft_month.rds")
+```
+
+now we can start to make the timeseries of the crime data, then plot it out.(We need to remove the sept 2018 data because it's not completed yet)
+
+```{r}
+crime_ts <- ts(crime_months, start=c(2001,01,01), end = c(2018,08,01), frequency=12)
+plot(crime_ts, xlab = "Time", ylab= "frequency of crime in Chicago")
+```
+we can do the same with the theft data
+
+```{r}
+theft_ts <- ts(theft_month, start=c(2001,01,01), end = c(2018,08,01), frequency=12)
+plot(theft_ts, xlab = "Time", ylab= "theft_freq")
+```
+
+we can see from these data, the overall crime and theft may be decreasing, to see it mo clearly we will decompose both data to see the trend, seasonal, and random components of the data.
+
+```{r}
+crime_ts_d <- decompose(crime_ts)
+plot(crime_ts_d)
+```
+
+```{r}
+theft_ts_d <- decompose(theft_ts)
+plot(theft_ts_d)
+```
+
+from these plot, we can see that from 2001 until 2015 the trend of the overall crime and theft were decreasing, then from 2015 until 2018, the overall crime trend if flat, but theft is increasing a little bit.
+
+now we will take a look at the seasonality of the crime and theft.
+
+```{r}
+plot(crime_ts_d$seasonal, xaxp = c(2001,2018,17))
+```
+
+```{r}
+plot(theft_ts_d$seasonal, xaxp = c(2001,2018,17))
+```
+
+From these two plot, we can see clearly that overall crime and theft have really clear pattern, each year, they are lower in the beginning then increase in the middle and drop again at the end of the year. 
+
+now we will use ARIMA to forecast the crime for the next 2 years.
+
+```{r}
+library(fpp)
+plot(forecast(auto.arima(crime_ts, stepwise=F, approximation=F), h= 24), main = "Forecasts for the next 2 year")
+```
+
+```{r}
+library(fpp)
+plot(forecast(auto.arima(theft_ts, stepwise=F, approximation=F),h = 24), main = "Forecasts for the next 2 year")
+```
+
